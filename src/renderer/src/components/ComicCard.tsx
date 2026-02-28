@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { api } from '../lib/api'
+import { api, localFileUrl } from '../lib/api'
 import type { Comic } from '../types'
 
 interface ComicCardProps {
@@ -25,7 +25,7 @@ export default function ComicCard({ comic, onFavoriteToggle }: ComicCardProps): 
       <div className="aspect-[3/4] bg-[var(--muted)] flex items-center justify-center overflow-hidden relative">
         {comic.image_path ? (
           <img
-            src={`local-file://${comic.image_path}`}
+            src={localFileUrl(comic.image_path)}
             alt={comic.name}
             className="w-full h-full object-cover"
           />

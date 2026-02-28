@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api } from '../lib/api'
+import { api, localFileUrl } from '../lib/api'
 import { showStatus } from '../components/StatusToast'
 import type { ComicWithVolumes, VolumeWithChapters } from '../types'
 
@@ -172,7 +172,7 @@ export default function ComicDetailPage(): React.JSX.Element {
             <div className="aspect-[3/4] rounded-lg bg-[var(--muted)] flex items-center justify-center overflow-hidden">
               {comic.image_path ? (
                 <img
-                  src={`local-file://${comic.image_path}`}
+                  src={localFileUrl(comic.image_path)}
                   alt={comic.name}
                   className="w-full h-full object-cover"
                 />

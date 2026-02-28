@@ -156,8 +156,11 @@ protocol.registerSchemesAsPrivileged([
 
 app.whenReady().then(() => {
   protocol.handle('local-file', (request) => {
-    const filePath = decodeURIComponent(request.url.replace('local-file://', ''))
-    return net.fetch(pathToFileURL(filePath).toString())
+    const url = new URL(request.url)
+    const filePath = decodeURIComponent(url.pathname)
+    // On Windows, pathname starts with /C:/... — strip the leading slash
+    const normalizedPath = process.platform === 'win32' ? filePath.replace(/^\//, '') : filePath
+    return net.fetch(pathToFileURL(normalizedPath).toString())
   })
 
   initDb()

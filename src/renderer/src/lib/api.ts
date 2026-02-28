@@ -24,3 +24,7 @@ declare global {
 }
 
 export const api = window.api
+
+export function localFileUrl(filePath: string): string {
+  return 'local-file:///' + encodeURIComponent(filePath).replace(/%2F/g, '/').replace(/%5C/g, '/')
+}
