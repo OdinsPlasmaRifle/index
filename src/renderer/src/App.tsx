@@ -1,0 +1,54 @@
+import { useEffect } from 'react'
+import { HashRouter, Routes, Route, useNavigate } from 'react-router-dom'
+import { api } from './lib/api'
+import { showStatus } from './components/StatusToast'
+import StatusToast from './components/StatusToast'
+import HomePage from './pages/HomePage'
+import ComicDetailPage from './pages/ComicDetailPage'
+import VolumePage from './pages/VolumePage'
+import SettingsPage from './pages/SettingsPage'
+
+function useImportStatus(): void {
+  useEffect(() => {
+    let dismiss: (() => void) | null = null
+    const unsubStart = api.onImportStarted(() => {
+      dismiss = showStatus('Importing...')
+    })
+    const unsubEnd = api.onImportFinished(() => {
+      dismiss?.()
+      dismiss = null
+    })
+    return () => {
+      unsubStart()
+      unsubEnd()
+      dismiss?.()
+    }
+  }, [])
+}
+
+function NavigateSettingsListener(): React.JSX.Element | null {
+  const navigate = useNavigate()
+  useEffect(() => {
+    return api.onNavigateSettings(() => {
+      navigate('/settings')
+    })
+  }, [navigate])
+  return null
+}
+
+export default function App(): React.JSX.Element {
+  useImportStatus()
+
+  return (
+    <HashRouter>
+      <NavigateSettingsListener />
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/comic/:id" element={<ComicDetailPage />} />
+        <Route path="/volume/:id" element={<VolumePage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+      </Routes>
+      <StatusToast />
+    </HashRouter>
+  )
+}

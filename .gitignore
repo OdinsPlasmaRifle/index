@@ -1,0 +1,5 @@
+test_comics/
+node_modules/
+out/
+dist/
+*.db
