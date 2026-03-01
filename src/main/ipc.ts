@@ -227,13 +227,19 @@ export function refreshImportDirectory(id: number): { imported: number; updated:
 
 export function clearImportDirectory(id: number): boolean {
   const db = getDb()
-  const row = db.prepare('SELECT path FROM import_directory WHERE id = ?').get(id) as
-    | { path: string }
+  const row = db.prepare('SELECT path, library_id FROM import_directory WHERE id = ?').get(id) as
+    | { path: string; library_id: number | null }
     | undefined
   if (!row) return false
 
+  // Normalize: strip trailing slashes for consistent matching
+  const normalized = row.path.replace(/[/\\]+$/, '')
+
   const transaction = db.transaction(() => {
-    db.prepare('DELETE FROM comic WHERE directory LIKE ?').run(row.path + '/%')
+    // Delete comics whose directory is under this import path
+    db.prepare("DELETE FROM comic WHERE directory LIKE ? ESCAPE '\\'").run(
+      normalized.replace(/[%_]/g, '\\$&') + '/%'
+    )
     db.prepare('DELETE FROM import_directory WHERE id = ?').run(id)
   })
 
