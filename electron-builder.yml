@@ -1,0 +1,18 @@
+appId: com.mindex.app
+productName: Mindex
+directories:
+  buildResources: resources
+  output: dist
+files:
+  - out/**/*
+  - resources/**/*
+linux:
+  target:
+    - AppImage
+    - deb
+  icon: resources
+  category: Utility
+win:
+  target:
+    - nsis
+  icon: resources/icon.ico

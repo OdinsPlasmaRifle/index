@@ -52,6 +52,47 @@ const migrations: string[] = [
     path TEXT NOT NULL UNIQUE,
     hidden INTEGER NOT NULL DEFAULT 0
   );
+  `,
+  // Migration 6: Library system
+  `
+  PRAGMA foreign_keys = OFF;
+
+  CREATE TABLE library (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    media_type TEXT NOT NULL DEFAULT 'comics' CHECK(media_type IN ('comics')),
+    image_path TEXT,
+    is_hidden INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  ALTER TABLE import_directory ADD COLUMN library_id INTEGER REFERENCES library(id) ON DELETE SET NULL;
+  ALTER TABLE comic ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'));
+  ALTER TABLE volume ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'));
+  ALTER TABLE chapter ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'));
+
+  INSERT INTO library (name, description, media_type, is_hidden)
+    SELECT 'My Comics', 'Auto-created library for existing comics', 'comics', 0
+    WHERE EXISTS (SELECT 1 FROM comic LIMIT 1);
+
+  CREATE TABLE comic_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL, author TEXT NOT NULL, image_path TEXT,
+    directory TEXT NOT NULL UNIQUE, favorite INTEGER NOT NULL DEFAULT 0,
+    library_id INTEGER NOT NULL REFERENCES library(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  INSERT INTO comic_new (id, name, author, image_path, directory, favorite, library_id, created_at)
+    SELECT id, name, author, image_path, directory, favorite,
+      COALESCE((SELECT id FROM library LIMIT 1), 1), created_at FROM comic;
+  DROP TABLE comic;
+  ALTER TABLE comic_new RENAME TO comic;
+
+  UPDATE import_directory SET library_id = (SELECT id FROM library LIMIT 1)
+    WHERE library_id IS NULL AND EXISTS (SELECT 1 FROM library LIMIT 1);
+
+  PRAGMA foreign_keys = ON;
   `
 ]
 

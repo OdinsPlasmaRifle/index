@@ -36,12 +36,12 @@ export default function ComicCard({ comic, onFavoriteToggle }: ComicCardProps): 
         )}
         <button
           onClick={handleToggleFavorite}
-          className="absolute bottom-2 right-2 w-9 h-9 flex items-center justify-center rounded-full bg-black border-2 border-black hover:opacity-80 transition-opacity"
+          className="absolute bottom-2 right-2 w-8 h-8 flex items-center justify-center rounded-full bg-black/60 hover:bg-black/80 transition-colors"
         >
           <svg
-            className="w-5 h-5"
+            className="w-4 h-4"
             viewBox="0 0 24 24"
-            fill={comic.favorite ? 'white' : 'none'}
+            fill={comic.favorite ? '#f43f5e' : 'none'}
             stroke="white"
             strokeWidth={2}
           >

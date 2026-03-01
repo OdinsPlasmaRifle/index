@@ -1,3 +1,17 @@
+export interface Library {
+  id: number
+  name: string
+  description: string | null
+  media_type: string
+  image_path: string | null
+  is_hidden: number
+  created_at: string
+}
+
+export interface LibraryWithCount extends Library {
+  comic_count: number
+}
+
 export interface Comic {
   id: number
   name: string
@@ -5,7 +19,8 @@ export interface Comic {
   image_path: string | null
   directory: string
   favorite: number
-  is_hidden: number
+  library_id: number
+  created_at: string
 }
 
 export interface Volume {
@@ -14,6 +29,7 @@ export interface Volume {
   number: number
   directory: string
   file: string | null
+  created_at: string
 }
 
 export interface Chapter {
@@ -22,6 +38,7 @@ export interface Chapter {
   number: number
   type: 'chapter' | 'extra'
   file: string
+  created_at: string
 }
 
 export interface VolumeWithChapters extends Volume {

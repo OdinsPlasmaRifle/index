@@ -3,6 +3,11 @@ import { getDb } from './db'
 import { readdirSync, statSync } from 'fs'
 import { join, basename, extname } from 'path'
 
+let onMenuRebuild: (() => void) | null = null
+export function setMenuRebuildCallback(cb: () => void): void {
+  onMenuRebuild = cb
+}
+
 function parseComicFolder(name: string): { name: string; author: string } | null {
   const match = name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
   if (!match) return null
@@ -29,7 +34,7 @@ function isImageFile(name: string): boolean {
   return ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'].includes(ext)
 }
 
-function scanComicDir(db: ReturnType<typeof getDb>, comicDir: string, parsed: { name: string; author: string }, hidden: boolean = false): 'imported' | 'updated' {
+function scanComicDir(db: ReturnType<typeof getDb>, comicDir: string, parsed: { name: string; author: string }, libraryId: number): 'imported' | 'updated' {
   // Find icon/cover image
   let imagePath: string | null = null
   const comicFiles = readdirSync(comicDir, { withFileTypes: true })
@@ -55,20 +60,20 @@ function scanComicDir(db: ReturnType<typeof getDb>, comicDir: string, parsed: { 
   let comicId: number
   let result: 'imported' | 'updated'
   if (existing) {
-    db.prepare('UPDATE comic SET name = ?, author = ?, image_path = ?, directory = ?, is_hidden = ? WHERE id = ?').run(
+    db.prepare('UPDATE comic SET name = ?, author = ?, image_path = ?, directory = ?, library_id = ? WHERE id = ?').run(
       parsed.name,
       parsed.author,
       imagePath,
       comicDir,
-      hidden ? 1 : 0,
+      libraryId,
       existing.id
     )
     comicId = existing.id
     result = 'updated'
   } else {
     const ins = db
-      .prepare('INSERT INTO comic (name, author, image_path, directory, is_hidden) VALUES (?, ?, ?, ?, ?)')
-      .run(parsed.name, parsed.author, imagePath, comicDir, hidden ? 1 : 0)
+      .prepare('INSERT INTO comic (name, author, image_path, directory, library_id) VALUES (?, ?, ?, ?, ?)')
+      .run(parsed.name, parsed.author, imagePath, comicDir, libraryId)
     comicId = ins.lastInsertRowid as number
     result = 'imported'
   }
@@ -140,7 +145,7 @@ function scanComicDir(db: ReturnType<typeof getDb>, comicDir: string, parsed: { 
   return result
 }
 
-function importDirectory(rootDir: string, hidden: boolean = false): { imported: number; updated: number } {
+function importDirectory(rootDir: string, libraryId: number): { imported: number; updated: number } {
   const db = getDb()
   let imported = 0
   let updated = 0
@@ -154,7 +159,7 @@ function importDirectory(rootDir: string, hidden: boolean = false): { imported: 
       const parsed = parseComicFolder(entry.name)
       if (!parsed) continue
 
-      const result = scanComicDir(db, join(rootDir, entry.name), parsed, hidden)
+      const result = scanComicDir(db, join(rootDir, entry.name), parsed, libraryId)
       if (result === 'imported') imported++
       else updated++
     }
@@ -164,8 +169,8 @@ function importDirectory(rootDir: string, hidden: boolean = false): { imported: 
 
   // Track the import directory
   db.prepare(
-    'INSERT INTO import_directory (path, hidden) VALUES (?, ?) ON CONFLICT(path) DO UPDATE SET hidden = excluded.hidden'
-  ).run(rootDir, hidden ? 1 : 0)
+    'INSERT INTO import_directory (path, library_id) VALUES (?, ?) ON CONFLICT(path) DO UPDATE SET library_id = excluded.library_id'
+  ).run(rootDir, libraryId)
 
   return { imported, updated }
 }
@@ -173,8 +178,8 @@ function importDirectory(rootDir: string, hidden: boolean = false): { imported: 
 function refreshComic(comicId: number): boolean {
   const db = getDb()
 
-  const comic = db.prepare('SELECT id, directory, is_hidden FROM comic WHERE id = ?').get(comicId) as
-    | { id: number; directory: string; is_hidden: number }
+  const comic = db.prepare('SELECT id, directory, library_id FROM comic WHERE id = ?').get(comicId) as
+    | { id: number; directory: string; library_id: number }
     | undefined
   if (!comic) return false
 
@@ -182,35 +187,42 @@ function refreshComic(comicId: number): boolean {
   if (!parsed) return false
 
   const transaction = db.transaction(() => {
-    scanComicDir(db, comic.directory, parsed, comic.is_hidden === 1)
+    scanComicDir(db, comic.directory, parsed, comic.library_id)
   })
 
   transaction()
   return true
 }
 
-export function clearComics(): void {
+export function clearAllData(): void {
   const db = getDb()
+  db.exec('DELETE FROM chapter')
+  db.exec('DELETE FROM volume')
   db.exec('DELETE FROM comic')
   db.exec('DELETE FROM import_directory')
+  db.exec('DELETE FROM library')
+  db.exec("DELETE FROM settings")
 }
 
-export function getImportDirectories(): Array<{ id: number; path: string; hidden: number }> {
+export function getImportDirectories(): Array<{ id: number; path: string; library_id: number | null; library_name: string | null }> {
   const db = getDb()
-  return db.prepare('SELECT id, path, hidden FROM import_directory ORDER BY path ASC').all() as Array<{
+  return db.prepare(
+    'SELECT d.id, d.path, d.library_id, l.name as library_name FROM import_directory d LEFT JOIN library l ON d.library_id = l.id ORDER BY d.path ASC'
+  ).all() as Array<{
     id: number
     path: string
-    hidden: number
+    library_id: number | null
+    library_name: string | null
   }>
 }
 
 export function refreshImportDirectory(id: number): { imported: number; updated: number } | null {
   const db = getDb()
-  const row = db.prepare('SELECT path, hidden FROM import_directory WHERE id = ?').get(id) as
-    | { path: string; hidden: number }
+  const row = db.prepare('SELECT path, library_id FROM import_directory WHERE id = ?').get(id) as
+    | { path: string; library_id: number | null }
     | undefined
-  if (!row) return null
-  return importDirectory(row.path, row.hidden === 1)
+  if (!row || !row.library_id) return null
+  return importDirectory(row.path, row.library_id)
 }
 
 export function clearImportDirectory(id: number): boolean {
@@ -229,8 +241,96 @@ export function clearImportDirectory(id: number): boolean {
   return true
 }
 
-export async function triggerImport(
-  win: BrowserWindow
+export function createLibrary(opts: { name: string; description?: string; mediaType?: string; imagePath?: string; isHidden?: boolean }): { id: number } {
+  const db = getDb()
+  const ins = db.prepare(
+    'INSERT INTO library (name, description, media_type, image_path, is_hidden) VALUES (?, ?, ?, ?, ?)'
+  ).run(
+    opts.name,
+    opts.description ?? null,
+    opts.mediaType ?? 'comics',
+    opts.imagePath ?? null,
+    opts.isHidden ? 1 : 0
+  )
+  return { id: ins.lastInsertRowid as number }
+}
+
+export function getLibraries(search?: string, hiddenFilter: 'hide' | 'include' | 'only' = 'hide'): Array<Record<string, unknown>> {
+  const db = getDb()
+  const conditions: string[] = []
+  const params: unknown[] = []
+
+  if (search) {
+    conditions.push('l.name LIKE ?')
+    params.push(`%${search}%`)
+  }
+
+  if (hiddenFilter === 'hide') {
+    conditions.push('l.is_hidden = 0')
+  } else if (hiddenFilter === 'only') {
+    conditions.push('l.is_hidden = 1')
+  }
+
+  const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : ''
+
+  return db.prepare(
+    `SELECT l.*, COUNT(c.id) as comic_count FROM library l LEFT JOIN comic c ON c.library_id = l.id ${whereClause} GROUP BY l.id ORDER BY l.name ASC`
+  ).all(...params) as Array<Record<string, unknown>>
+}
+
+export function getLibrary(id: number): Record<string, unknown> | null {
+  const db = getDb()
+  return (db.prepare('SELECT l.*, COUNT(c.id) as comic_count FROM library l LEFT JOIN comic c ON c.library_id = l.id WHERE l.id = ? GROUP BY l.id').get(id) as Record<string, unknown>) ?? null
+}
+
+export function updateLibrary(id: number, opts: { name?: string; description?: string; imagePath?: string | null; isHidden?: boolean }): boolean {
+  const db = getDb()
+  const sets: string[] = []
+  const params: unknown[] = []
+
+  if (opts.name !== undefined) {
+    sets.push('name = ?')
+    params.push(opts.name)
+  }
+  if (opts.description !== undefined) {
+    sets.push('description = ?')
+    params.push(opts.description || null)
+  }
+  if (opts.imagePath !== undefined) {
+    sets.push('image_path = ?')
+    params.push(opts.imagePath)
+  }
+  if (opts.isHidden !== undefined) {
+    sets.push('is_hidden = ?')
+    params.push(opts.isHidden ? 1 : 0)
+  }
+
+  if (sets.length === 0) return false
+
+  params.push(id)
+  const result = db.prepare(`UPDATE library SET ${sets.join(', ')} WHERE id = ?`).run(...params)
+  return result.changes > 0
+}
+
+export function deleteLibrary(id: number): boolean {
+  const db = getDb()
+  const result = db.prepare('DELETE FROM library WHERE id = ?').run(id)
+  return result.changes > 0
+}
+
+export async function pickLibraryImage(win: BrowserWindow): Promise<string | null> {
+  const result = await dialog.showOpenDialog(win, {
+    properties: ['openFile'],
+    title: 'Select Library Image',
+    filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'] }]
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0]
+}
+
+export async function triggerImportToLibrary(
+  win: BrowserWindow,
+  libraryId: number
 ): Promise<{ imported: number; updated: number } | null> {
   const result = await dialog.showOpenDialog(win, {
     properties: ['openDirectory'],
@@ -241,22 +341,7 @@ export async function triggerImport(
     return null
   }
 
-  const hiddenResult = await dialog.showMessageBox(win, {
-    type: 'question',
-    buttons: ['Import', 'Cancel'],
-    defaultId: 0,
-    cancelId: 1,
-    title: 'Import Comics',
-    message: 'Select import options',
-    checkboxLabel: 'Import as hidden content',
-    checkboxChecked: false
-  })
-
-  if (hiddenResult.response === 1) {
-    return null
-  }
-
-  return importDirectory(result.filePaths[0], hiddenResult.checkboxChecked)
+  return importDirectory(result.filePaths[0], libraryId)
 }
 
 export function getHiddenContentEnabled(): boolean {
@@ -275,12 +360,16 @@ export function setHiddenContentEnabled(enabled: boolean): void {
 }
 
 export function registerIpcHandlers(): void {
-  ipcMain.handle('import-comics', async (event) => {
+  ipcMain.handle('import-comics', async (event, libraryId: number) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return { imported: 0, updated: 0 }
     event.sender.send('import-started')
     try {
-      return await triggerImport(win)
+      const result = await triggerImportToLibrary(win, libraryId)
+      if (result) {
+        event.sender.send('comics-updated')
+      }
+      return result
     } finally {
       event.sender.send('import-finished')
     }
@@ -288,12 +377,12 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(
     'get-comics',
-    (_event, page: number, search: string, pageSize: number = 20, hiddenFilter: 'hide' | 'include' | 'only' = 'hide') => {
+    (_event, libraryId: number, page: number, search: string, pageSize: number = 20, favoritesOnly: boolean = false) => {
       const db = getDb()
       const offset = (page - 1) * pageSize
 
-      const conditions: string[] = []
-      const params: unknown[] = []
+      const conditions: string[] = ['library_id = ?']
+      const params: unknown[] = [libraryId]
 
       if (search) {
         conditions.push('(name LIKE ? OR author LIKE ?)')
@@ -301,13 +390,11 @@ export function registerIpcHandlers(): void {
         params.push(term, term)
       }
 
-      if (hiddenFilter === 'hide') {
-        conditions.push('is_hidden = 0')
-      } else if (hiddenFilter === 'only') {
-        conditions.push('is_hidden = 1')
+      if (favoritesOnly) {
+        conditions.push('favorite = 1')
       }
 
-      const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : ''
+      const whereClause = 'WHERE ' + conditions.join(' AND ')
 
       const countRow = db
         .prepare(`SELECT COUNT(*) as total FROM comic ${whereClause}`)
@@ -321,6 +408,11 @@ export function registerIpcHandlers(): void {
       return { comics, total: countRow.total, page, pageSize }
     }
   )
+
+  ipcMain.handle('get-random-comic', (_event, libraryId: number) => {
+    const db = getDb()
+    return db.prepare('SELECT id FROM comic WHERE library_id = ? ORDER BY RANDOM() LIMIT 1').get(libraryId) as { id: number } | undefined ?? null
+  })
 
   ipcMain.handle('get-comic', (_event, id: number) => {
     const db = getDb()
@@ -384,6 +476,11 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('set-hidden-content-enabled', (_event, enabled: boolean) => {
     setHiddenContentEnabled(enabled)
+    const windows = BrowserWindow.getAllWindows()
+    for (const w of windows) {
+      w.webContents.send('hidden-content-toggled', enabled)
+    }
+    if (onMenuRebuild) onMenuRebuild()
   })
 
   ipcMain.handle('get-import-directories', () => {
@@ -404,5 +501,37 @@ export function registerIpcHandlers(): void {
       event.sender.send('comics-updated')
     }
     return result
+  })
+
+  // Library handlers
+  ipcMain.handle('create-library', (_event, opts: { name: string; description?: string; mediaType?: string; imagePath?: string; isHidden?: boolean }) => {
+    return createLibrary(opts)
+  })
+
+  ipcMain.handle('pick-library-image', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return null
+    return pickLibraryImage(win)
+  })
+
+  ipcMain.handle('get-libraries', (_event, search?: string, hiddenFilter?: 'hide' | 'include' | 'only') => {
+    return getLibraries(search, hiddenFilter)
+  })
+
+  ipcMain.handle('get-library', (_event, id: number) => {
+    return getLibrary(id)
+  })
+
+  ipcMain.handle('update-library', (_event, id: number, opts: { name?: string; description?: string; imagePath?: string | null; isHidden?: boolean }) => {
+    return updateLibrary(id, opts)
+  })
+
+  ipcMain.handle('delete-library', (_event, id: number) => {
+    return deleteLibrary(id)
+  })
+
+  ipcMain.handle('clear-all-data', (event) => {
+    clearAllData()
+    event.sender.send('comics-updated')
   })
 }

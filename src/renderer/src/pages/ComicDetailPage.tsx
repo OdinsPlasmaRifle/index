@@ -4,8 +4,8 @@ import { api, localFileUrl } from '../lib/api'
 import { showStatus } from '../components/StatusToast'
 import type { ComicWithVolumes, VolumeWithChapters } from '../types'
 
-function VolumeAccordion({ vol }: { vol: VolumeWithChapters }): React.JSX.Element {
-  const [open, setOpen] = useState(false)
+function VolumeAccordion({ vol, defaultOpen = false }: { vol: VolumeWithChapters; defaultOpen?: boolean }): React.JSX.Element {
+  const [open, setOpen] = useState(defaultOpen)
 
   const chapters = vol.chapters.filter((c) => c.type === 'chapter')
   const extras = vol.chapters.filter((c) => c.type === 'extra')
@@ -16,20 +16,19 @@ function VolumeAccordion({ vol }: { vol: VolumeWithChapters }): React.JSX.Elemen
 
   return (
     <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] overflow-hidden">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between p-4 text-left hover:bg-[var(--secondary)] transition-colors"
-      >
-        <span className="font-medium">Volume {vol.number}</span>
+      <div className="flex items-center justify-between p-4 hover:bg-[var(--secondary)] transition-colors">
+        <span
+          className={`font-medium ${vol.file ? 'cursor-pointer hover:underline' : ''}`}
+          onClick={() => vol.file ? handleOpen(vol.file) : setOpen(!open)}
+        >
+          Volume {vol.number}
+        </span>
         <div className="flex items-center gap-3">
           {vol.file && (
             <span
               role="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                handleOpen(vol.file!)
-              }}
-              className="px-3 py-1 text-xs font-medium rounded border border-[var(--border)] hover:bg-[var(--card)] transition-colors"
+              onClick={() => handleOpen(vol.file!)}
+              className="px-3 py-1 text-xs font-medium rounded border border-[var(--border)] hover:bg-[var(--card)] transition-colors cursor-pointer"
             >
               Read
             </span>
@@ -37,17 +36,19 @@ function VolumeAccordion({ vol }: { vol: VolumeWithChapters }): React.JSX.Elemen
           <span className="text-xs text-[var(--muted-foreground)]">
             {chapters.length} ch{extras.length > 0 ? ` + ${extras.length} extra` : ''}
           </span>
-          <svg
-            className={`w-4 h-4 text-[var(--muted-foreground)] transition-transform ${open ? 'rotate-180' : ''}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
+          <button onClick={() => setOpen(!open)}>
+            <svg
+              className={`w-4 h-4 text-[var(--muted-foreground)] transition-transform ${open ? 'rotate-180' : ''}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
         </div>
-      </button>
+      </div>
 
       {open && (
         <div className="border-t border-[var(--border)]">
@@ -56,15 +57,13 @@ function VolumeAccordion({ vol }: { vol: VolumeWithChapters }): React.JSX.Elemen
               {chapters.map((ch) => (
                 <div
                   key={ch.id}
-                  className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border)] last:border-b-0"
+                  onClick={() => handleOpen(ch.file)}
+                  className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border)] last:border-b-0 cursor-pointer hover:bg-[var(--secondary)] transition-colors"
                 >
                   <span className="text-sm">Chapter {ch.number}</span>
-                  <button
-                    onClick={() => handleOpen(ch.file)}
-                    className="px-3 py-1 text-xs rounded border border-[var(--border)] hover:bg-[var(--secondary)] transition-colors"
-                  >
+                  <span className="px-3 py-1 text-xs rounded border border-[var(--border)]">
                     Read
-                  </button>
+                  </span>
                 </div>
               ))}
             </div>
@@ -78,15 +77,13 @@ function VolumeAccordion({ vol }: { vol: VolumeWithChapters }): React.JSX.Elemen
               {extras.map((ex) => (
                 <div
                   key={ex.id}
-                  className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border)] last:border-b-0"
+                  onClick={() => handleOpen(ex.file)}
+                  className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border)] last:border-b-0 cursor-pointer hover:bg-[var(--secondary)] transition-colors"
                 >
                   <span className="text-sm">Extra {ex.number}</span>
-                  <button
-                    onClick={() => handleOpen(ex.file)}
-                    className="px-3 py-1 text-xs rounded border border-[var(--border)] hover:bg-[var(--secondary)] transition-colors"
-                  >
+                  <span className="px-3 py-1 text-xs rounded border border-[var(--border)]">
                     Read
-                  </button>
+                  </span>
                 </div>
               ))}
             </div>
@@ -161,7 +158,7 @@ export default function ComicDetailPage(): React.JSX.Element {
     <div className="min-h-screen p-6">
       <div className="max-w-7xl mx-auto">
         <Link
-          to="/"
+          to={`/library/${comic.library_id}`}
           className="inline-block mb-6 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
         >
           &larr; Back to library
@@ -186,11 +183,6 @@ export default function ComicDetailPage(): React.JSX.Element {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <h1 className="text-3xl font-bold">{comic.name}</h1>
-              {comic.is_hidden ? (
-                <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-red-900/30 text-red-400 border border-red-800/50">
-                  Hidden
-                </span>
-              ) : null}
             </div>
             <p className="text-lg text-[var(--muted-foreground)]">{comic.author}</p>
             <p className="text-sm text-[var(--muted-foreground)] mt-2">
@@ -233,8 +225,8 @@ export default function ComicDetailPage(): React.JSX.Element {
           <div>
             <h2 className="text-xl font-semibold mb-4">Volumes</h2>
             <div className="space-y-2">
-              {comic.volumes.map((vol) => (
-                <VolumeAccordion key={vol.id} vol={vol} />
+              {comic.volumes.map((vol, i) => (
+                <VolumeAccordion key={vol.id} vol={vol} defaultOpen={i === 0} />
               ))}
             </div>
           </div>

@@ -1,8 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 const api = {
-  importComics: (): Promise<{ imported: number; updated: number } | null> =>
-    ipcRenderer.invoke('import-comics'),
+  importComics: (libraryId: number): Promise<{ imported: number; updated: number } | null> =>
+    ipcRenderer.invoke('import-comics', libraryId),
 
   onComicsUpdated: (callback: () => void): (() => void) => {
     const handler = (): void => callback()
@@ -23,10 +23,11 @@ const api = {
   },
 
   getComics: (
+    libraryId: number,
     page: number,
     search: string,
     pageSize?: number,
-    hiddenFilter: 'hide' | 'include' | 'only' = 'hide'
+    favoritesOnly?: boolean
   ): Promise<{
     comics: Array<{
       id: number
@@ -35,12 +36,16 @@ const api = {
       image_path: string | null
       directory: string
       favorite: number
-      is_hidden: number
+      library_id: number
+      created_at: string
     }>
     total: number
     page: number
     pageSize: number
-  }> => ipcRenderer.invoke('get-comics', page, search, pageSize, hiddenFilter),
+  }> => ipcRenderer.invoke('get-comics', libraryId, page, search, pageSize, favoritesOnly),
+
+  getRandomComic: (libraryId: number): Promise<{ id: number } | null> =>
+    ipcRenderer.invoke('get-random-comic', libraryId),
 
   onHiddenContentToggled: (callback: (enabled: boolean) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, enabled: boolean): void => callback(enabled)
@@ -51,6 +56,9 @@ const api = {
   getHiddenContentEnabled: (): Promise<boolean> =>
     ipcRenderer.invoke('get-hidden-content-enabled'),
 
+  setHiddenContentEnabled: (enabled: boolean): Promise<void> =>
+    ipcRenderer.invoke('set-hidden-content-enabled', enabled),
+
   getComic: (
     id: number
   ): Promise<{
@@ -60,18 +68,22 @@ const api = {
     image_path: string | null
     directory: string
     favorite: number
+    library_id: number
+    created_at: string
     volumes: Array<{
       id: number
       comic_id: number
       number: number
       directory: string
       file: string | null
+      created_at: string
       chapters: Array<{
         id: number
         volume_id: number
         number: number
         type: 'chapter' | 'extra'
         file: string
+        created_at: string
       }>
     }>
   } | null> => ipcRenderer.invoke('get-comic', id),
@@ -84,12 +96,14 @@ const api = {
     number: number
     directory: string
     file: string | null
+    created_at: string
     chapters: Array<{
       id: number
       volume_id: number
       number: number
       type: 'chapter' | 'extra'
       file: string
+      created_at: string
     }>
   } | null> => ipcRenderer.invoke('get-volume', id),
 
@@ -102,7 +116,7 @@ const api = {
   openFile: (filePath: string): Promise<{ success?: boolean; error?: string }> =>
     ipcRenderer.invoke('open-file', filePath),
 
-  getImportDirectories: (): Promise<Array<{ id: number; path: string; hidden: number }>> =>
+  getImportDirectories: (): Promise<Array<{ id: number; path: string; library_id: number | null; library_name: string | null }>> =>
     ipcRenderer.invoke('get-import-directories'),
 
   refreshImportDirectory: (id: number): Promise<{ imported: number; updated: number } | null> =>
@@ -115,7 +129,45 @@ const api = {
     const handler = (): void => callback()
     ipcRenderer.on('navigate-settings', handler)
     return () => ipcRenderer.removeListener('navigate-settings', handler)
-  }
+  },
+
+  // Library APIs
+  createLibrary: (opts: { name: string; description?: string; mediaType?: string; imagePath?: string; isHidden?: boolean }): Promise<{ id: number }> =>
+    ipcRenderer.invoke('create-library', opts),
+
+  pickLibraryImage: (): Promise<string | null> =>
+    ipcRenderer.invoke('pick-library-image'),
+
+  getLibraries: (search?: string, hiddenFilter?: 'hide' | 'include' | 'only'): Promise<Array<{
+    id: number; name: string; description: string | null; media_type: string; image_path: string | null; is_hidden: number; created_at: string; comic_count: number
+  }>> =>
+    ipcRenderer.invoke('get-libraries', search, hiddenFilter),
+
+  getLibrary: (id: number): Promise<{
+    id: number; name: string; description: string | null; media_type: string; image_path: string | null; is_hidden: number; created_at: string; comic_count: number
+  } | null> =>
+    ipcRenderer.invoke('get-library', id),
+
+  updateLibrary: (id: number, opts: { name?: string; description?: string; imagePath?: string | null; isHidden?: boolean }): Promise<boolean> =>
+    ipcRenderer.invoke('update-library', id, opts),
+
+  deleteLibrary: (id: number): Promise<boolean> =>
+    ipcRenderer.invoke('delete-library', id),
+
+  onNavigateAddLibrary: (callback: () => void): (() => void) => {
+    const handler = (): void => callback()
+    ipcRenderer.on('navigate-add-library', handler)
+    return () => ipcRenderer.removeListener('navigate-add-library', handler)
+  },
+
+  onNavigateImport: (callback: () => void): (() => void) => {
+    const handler = (): void => callback()
+    ipcRenderer.on('navigate-import', handler)
+    return () => ipcRenderer.removeListener('navigate-import', handler)
+  },
+
+  clearAllData: (): Promise<void> =>
+    ipcRenderer.invoke('clear-all-data')
 }
 
 contextBridge.exposeInMainWorld('api', api)

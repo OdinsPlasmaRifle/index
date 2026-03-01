@@ -1,8 +1,8 @@
-import { app, BrowserWindow, Menu, dialog, protocol, net } from 'electron'
+import { app, BrowserWindow, Menu, protocol, net } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { initDb } from './db'
-import { registerIpcHandlers, triggerImport, clearComics, getHiddenContentEnabled, setHiddenContentEnabled } from './ipc'
+import { registerIpcHandlers, getHiddenContentEnabled, setHiddenContentEnabled, setMenuRebuildCallback } from './ipc'
 import { pathToFileURL } from 'url'
 
 function buildMenu(): void {
@@ -26,40 +26,19 @@ function buildMenu(): void {
       label: 'File',
       submenu: [
         {
-          label: 'Import Comics...',
-          accelerator: 'CmdOrCtrl+I',
-          click: async (): Promise<void> => {
+          label: 'Add Library...',
+          accelerator: 'CmdOrCtrl+L',
+          click: (): void => {
             const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-            if (!win) return
-            win.webContents.send('import-started')
-            try {
-              const result = await triggerImport(win)
-              if (result) {
-                win.webContents.send('comics-updated')
-              }
-            } finally {
-              win.webContents.send('import-finished')
-            }
+            if (win) win.webContents.send('navigate-add-library')
           }
         },
         {
-          label: 'Clear Comics...',
-          click: async (): Promise<void> => {
+          label: 'Import Media...',
+          accelerator: 'CmdOrCtrl+I',
+          click: (): void => {
             const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-            if (!win) return
-            const result = await dialog.showMessageBox(win, {
-              type: 'warning',
-              buttons: ['Clear All', 'Cancel'],
-              defaultId: 1,
-              cancelId: 1,
-              title: 'Clear Comics',
-              message: 'Are you sure you want to clear all comics?',
-              detail: 'All imported comics and their associated data (volumes, chapters) will be permanently removed. This cannot be undone.'
-            })
-            if (result.response === 0) {
-              clearComics()
-              win.webContents.send('comics-updated')
-            }
+            if (win) win.webContents.send('navigate-import')
           }
         },
         { type: 'separator' },
@@ -92,7 +71,7 @@ function buildMenu(): void {
         },
         { type: 'separator' },
         {
-          label: 'Enable hidden content',
+          label: 'Enable Hidden Content',
           type: 'checkbox',
           checked: hiddenEnabled,
           click: (menuItem): void => {
@@ -137,6 +116,7 @@ function createWindow(): void {
     minWidth: 800,
     minHeight: 600,
     title: 'Mindex',
+    icon: join(__dirname, '../../resources/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -166,6 +146,7 @@ app.whenReady().then(() => {
   initDb()
   registerIpcHandlers()
   buildMenu()
+  setMenuRebuildCallback(buildMenu)
   createWindow()
 
   app.on('activate', () => {
