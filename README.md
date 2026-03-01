@@ -1,6 +1,6 @@
-# Index
+# Mindex
 
-Desktop application for indexing and browsing a local comic book collection. Built with Electron, React, and SQLite.
+Desktop application for indexing and browsing a local media collection. Built with Electron, React, and SQLite.
 
 Import directories of comics organised by series folders (e.g. `Series Name (Author)/Vol. 1/Ch. 01.cbz`) and browse them with search, favorites, and volume/chapter drill-down. 
 

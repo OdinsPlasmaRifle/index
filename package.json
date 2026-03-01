@@ -1,7 +1,7 @@
 {
-  "name": "comic-index",
+  "name": "mindex",
   "version": "1.0.0",
-  "description": "Comic Book Index - Desktop app for indexing and browsing a local comic book collection",
+  "description": "Mindex - Desktop app for indexing and browsing a local media collection",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

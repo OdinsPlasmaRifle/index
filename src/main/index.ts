@@ -136,7 +136,7 @@ function createWindow(): void {
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    title: 'Comic Index',
+    title: 'Mindex',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false

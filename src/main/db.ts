@@ -79,7 +79,7 @@ function applyMigrations(database: Database.Database): void {
 }
 
 export function initDb(): void {
-  const dbPath = join(app.getPath('userData'), 'comic-index.db')
+  const dbPath = join(app.getPath('userData'), 'mindex.db')
   db = new Database(dbPath)
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
