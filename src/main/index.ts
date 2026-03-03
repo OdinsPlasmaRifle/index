@@ -115,6 +115,8 @@ function createWindow(): void {
     }
   })
 
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {

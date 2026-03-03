@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { api, localFileUrl } from '../lib/api'
 import { showStatus } from '../components/StatusToast'
+import ImageLightbox from '../components/ImageLightbox'
 import type { ComicWithVolumes, VolumeWithChapters } from '../types'
 
 function HeartIcon({ filled, onClick }: { filled: boolean; onClick: (e: React.MouseEvent) => void }): React.JSX.Element {
@@ -161,6 +162,7 @@ export default function ComicDetailPage(): React.JSX.Element {
   const [comic, setComic] = useState<ComicWithVolumes | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
 
   const loadComic = async (): Promise<void> => {
     if (!id) return
@@ -222,7 +224,10 @@ export default function ComicDetailPage(): React.JSX.Element {
 
         <div className="flex gap-6 mb-8">
           <div className="w-64 shrink-0">
-            <div className="aspect-[3/4] rounded-lg bg-[var(--muted)] flex items-center justify-center overflow-hidden">
+            <div
+              className={`aspect-[3/4] rounded-lg bg-[var(--muted)] flex items-center justify-center overflow-hidden${comic.image_path ? ' cursor-pointer' : ''}`}
+              onClick={comic.image_path ? () => setLightboxOpen(true) : undefined}
+            >
               {comic.image_path ? (
                 <img
                   src={localFileUrl(comic.image_path)}
@@ -288,6 +293,14 @@ export default function ComicDetailPage(): React.JSX.Element {
           </div>
         )}
       </div>
+
+      {lightboxOpen && comic.image_path && (
+        <ImageLightbox
+          src={localFileUrl(comic.image_path)}
+          alt={comic.name}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
     </div>
   )
 }
