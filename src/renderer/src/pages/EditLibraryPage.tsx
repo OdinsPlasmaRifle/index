@@ -15,12 +15,13 @@ export default function EditLibraryPage(): React.JSX.Element {
   const [description, setDescription] = useState('')
   const [imagePath, setImagePath] = useState<string | null>(null)
   const [isHidden, setIsHidden] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
 
   const [sources, setSources] = useState<SourceWithStatus[]>([])
   const [refreshingSourceId, setRefreshingSourceId] = useState<number | null>(null)
   const [clearingSourceId, setClearingSourceId] = useState<number | null>(null)
   const [addingSource, setAddingSource] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const loadSources = async (): Promise<void> => {
     const result = await api.checkLibrarySourcesExist(libraryId)
@@ -41,9 +42,16 @@ export default function EditLibraryPage(): React.JSX.Element {
     loadSources()
   }, [libraryId])
 
+  const saveField = (opts: Parameters<typeof api.updateLibrary>[1]): void => {
+    api.updateLibrary(libraryId, opts)
+  }
+
   const handlePickImage = async (): Promise<void> => {
     const path = await api.pickLibraryImage()
-    if (path) setImagePath(path)
+    if (path) {
+      setImagePath(path)
+      saveField({ imagePath: path })
+    }
   }
 
   const handleAddSource = async (): Promise<void> => {
@@ -90,24 +98,6 @@ export default function EditLibraryPage(): React.JSX.Element {
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
-    e.preventDefault()
-    if (!name.trim() || submitting) return
-
-    setSubmitting(true)
-    try {
-      await api.updateLibrary(libraryId, {
-        name: name.trim(),
-        description: description.trim() || '',
-        imagePath,
-        isHidden
-      })
-      navigate(`/library/${libraryId}`)
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-[var(--muted-foreground)]">
@@ -136,7 +126,7 @@ export default function EditLibraryPage(): React.JSX.Element {
 
         <h1 className="text-2xl font-bold mb-6">Edit Library</h1>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-6">
           <section>
             <h2 className="text-lg font-semibold mb-4">Display</h2>
             <div className="space-y-5">
@@ -146,7 +136,7 @@ export default function EditLibraryPage(): React.JSX.Element {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  required
+                  onBlur={() => { if (name.trim() && name.trim() !== library.name) saveField({ name: name.trim() }) }}
                   className="w-full px-3 py-2 rounded-md border border-[var(--border)] bg-[var(--card)] text-[var(--card-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
                   placeholder="My Library"
                 />
@@ -157,6 +147,7 @@ export default function EditLibraryPage(): React.JSX.Element {
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
+                  onBlur={() => { if (description.trim() !== (library.description ?? '')) saveField({ description: description.trim() }) }}
                   rows={3}
                   className="w-full px-3 py-2 rounded-md border border-[var(--border)] bg-[var(--card)] text-[var(--card-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] resize-vertical"
                   placeholder="Optional description..."
@@ -181,7 +172,7 @@ export default function EditLibraryPage(): React.JSX.Element {
                   {imagePath && (
                     <button
                       type="button"
-                      onClick={() => setImagePath(null)}
+                      onClick={() => { setImagePath(null); saveField({ imagePath: null }) }}
                       className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                     >
                       Remove
@@ -294,7 +285,7 @@ export default function EditLibraryPage(): React.JSX.Element {
                   type="checkbox"
                   id="is-hidden"
                   checked={isHidden}
-                  onChange={(e) => setIsHidden(e.target.checked)}
+                  onChange={(e) => { setIsHidden(e.target.checked); saveField({ isHidden: e.target.checked }) }}
                   className="rounded border-[var(--border)]"
                 />
                 <label htmlFor="is-hidden" className="text-sm">Hidden library</label>
@@ -302,22 +293,53 @@ export default function EditLibraryPage(): React.JSX.Element {
             </div>
           </section>
 
-          <div className="flex gap-3 pt-2">
+        </div>
+
+        <hr className="border-[var(--border)] my-6" />
+
+        <section className="mb-6">
+          <h2 className="text-lg font-semibold mb-2 text-red-500">Danger Zone</h2>
+          <p className="text-sm text-[var(--muted-foreground)] mb-4">
+            Permanently delete this library and all its content (comics, volumes, chapters, and sources).
+            This action cannot be undone.
+          </p>
+          {confirmingDelete ? (
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-[var(--muted-foreground)]">Are you sure?</span>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={async () => {
+                  setDeleting(true)
+                  try {
+                    await api.deleteLibrary(libraryId)
+                    navigate('/')
+                  } finally {
+                    setDeleting(false)
+                  }
+                }}
+                className="px-3 py-1 text-sm rounded-md bg-red-500 text-white hover:bg-red-600 disabled:opacity-50 transition-colors"
+              >
+                {deleting ? 'Deleting...' : 'Confirm'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(false)}
+                className="px-3 py-1 text-sm rounded-md bg-[var(--secondary)] hover:bg-[var(--secondary)]/80 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
             <button
-              type="submit"
-              disabled={!name.trim() || submitting}
-              className="px-4 py-2 text-sm rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-50 transition-opacity"
+              type="button"
+              onClick={() => setConfirmingDelete(true)}
+              className="px-4 py-2 text-sm rounded-md border border-red-500 text-red-500 hover:bg-red-500/10 transition-colors"
             >
-              {submitting ? 'Saving...' : 'Save Changes'}
+              Delete Library
             </button>
-            <Link
-              to={`/library/${libraryId}`}
-              className="px-4 py-2 text-sm rounded-md border border-[var(--border)] hover:bg-[var(--secondary)] transition-colors"
-            >
-              Cancel
-            </Link>
-          </div>
-        </form>
+          )}
+        </section>
       </div>
     </div>
   )

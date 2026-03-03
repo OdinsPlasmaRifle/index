@@ -112,6 +112,10 @@ export default function LibraryComicsPage(): React.JSX.Element {
           </div>
         )}
 
+        {library?.description && (
+          <p className="text-sm text-[var(--muted-foreground)] mb-4">{library.description}</p>
+        )}
+
         <div className="mb-4">
           <SearchBar value={search} onChange={handleSearch} />
         </div>

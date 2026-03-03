@@ -383,7 +383,11 @@ export function updateLibrary(id: number, opts: { name?: string; description?: s
 
 export function deleteLibrary(id: number): boolean {
   const db = getDb()
-  const result = db.prepare('DELETE FROM library WHERE id = ?').run(id)
+  const del = db.transaction(() => {
+    db.prepare('DELETE FROM source WHERE library_id = ?').run(id)
+    return db.prepare('DELETE FROM library WHERE id = ?').run(id)
+  })
+  const result = del()
   return result.changes > 0
 }
 
