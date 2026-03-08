@@ -9,6 +9,8 @@ import Pagination from '../components/Pagination'
 const PAGE_SIZE = 20
 
 const savedPages: Record<number, number> = {}
+const savedSearch: Record<number, string> = {}
+const savedFavoritesOnly: Record<number, boolean> = {}
 
 export default function LibraryComicsPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>()
@@ -19,8 +21,8 @@ export default function LibraryComicsPage(): React.JSX.Element {
   const [comics, setComics] = useState<Comic[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(savedPages[libraryId] ?? 1)
-  const [search, setSearch] = useState('')
-  const [favoritesOnly, setFavoritesOnly] = useState(false)
+  const [search, setSearch] = useState(savedSearch[libraryId] ?? '')
+  const [favoritesOnly, setFavoritesOnly] = useState(savedFavoritesOnly[libraryId] ?? false)
   const [missingSourcePaths, setMissingSourcePaths] = useState<string[]>([])
 
   useEffect(() => {
@@ -31,6 +33,14 @@ export default function LibraryComicsPage(): React.JSX.Element {
   useEffect(() => {
     savedPages[libraryId] = page
   }, [libraryId, page])
+
+  useEffect(() => {
+    savedSearch[libraryId] = search
+  }, [libraryId, search])
+
+  useEffect(() => {
+    savedFavoritesOnly[libraryId] = favoritesOnly
+  }, [libraryId, favoritesOnly])
 
   const loadComics = useCallback(async () => {
     const result = await api.getComics(libraryId, page, search, PAGE_SIZE, favoritesOnly)

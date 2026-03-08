@@ -27,6 +27,14 @@ export default function ImageLightbox({ src, alt, onClose }: ImageLightboxProps)
     }))
   }, [])
 
+  // Prevent background page scroll while lightbox is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [])
+
   useEffect(() => {
     const handleKey = (e: KeyboardEvent): void => {
       switch (e.key) {
@@ -49,20 +57,26 @@ export default function ImageLightbox({ src, alt, onClose }: ImageLightboxProps)
     return () => document.removeEventListener('keydown', handleKey)
   }, [onClose, zoomAtCenter, resetView])
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault()
-    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP
-    // Cursor position relative to viewport center
-    const cx = e.clientX - window.innerWidth / 2
-    const cy = e.clientY - window.innerHeight / 2
-    setView((v) => {
-      const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.zoom + delta))
-      const ratio = newZoom / v.zoom
-      // Adjust pan so the point under the cursor stays fixed
-      const newPanX = cx - (cx - v.panX) * ratio
-      const newPanY = cy - (cy - v.panY) * ratio
-      return { zoom: newZoom, panX: newPanX, panY: newPanY }
-    })
+  // Use a native wheel listener with { passive: false } so preventDefault() actually works.
+  // React's onWheel uses passive listeners by default, which can't prevent page scroll.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const handleWheel = (e: WheelEvent): void => {
+      e.preventDefault()
+      const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP
+      const cx = e.clientX - window.innerWidth / 2
+      const cy = e.clientY - window.innerHeight / 2
+      setView((v) => {
+        const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.zoom + delta))
+        const ratio = newZoom / v.zoom
+        const newPanX = cx - (cx - v.panX) * ratio
+        const newPanY = cy - (cy - v.panY) * ratio
+        return { zoom: newZoom, panX: newPanX, panY: newPanY }
+      })
+    }
+    el.addEventListener('wheel', handleWheel, { passive: false })
+    return () => el.removeEventListener('wheel', handleWheel)
   }, [])
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
@@ -99,7 +113,6 @@ export default function ImageLightbox({ src, alt, onClose }: ImageLightboxProps)
       ref={containerRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
       onClick={handleBackdropClick}
-      onWheel={handleWheel}
     >
       {/* Close button */}
       <button

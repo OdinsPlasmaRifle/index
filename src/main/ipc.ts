@@ -584,11 +584,13 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('open-file', async (_event, filePath: string) => {
-    const result = await shell.openPath(filePath)
-    if (result) {
-      return { error: result }
+    try {
+      // Use openExternal with file:// URI — more reliable across Linux DEs
+      await shell.openExternal(`file://${filePath}`)
+      return { success: true }
+    } catch (err) {
+      return { error: String(err) }
     }
-    return { success: true }
   })
 
   ipcMain.handle('get-hidden-content-enabled', () => {

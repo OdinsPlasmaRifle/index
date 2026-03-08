@@ -41,6 +41,12 @@ export default function SearchBar({ value, onChange, placeholder }: SearchBarPro
         placeholder={placeholder ?? "Search by name or author..."}
         value={local}
         onChange={(e) => setLocal(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && local) {
+            e.preventDefault()
+            handleClear()
+          }
+        }}
         className="w-full pl-10 pr-9 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
       />
       {local && (
